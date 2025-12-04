@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>加密货币价格预测</title>
+    <!-- 引入Chart.js库用于绘制图表 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .output-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .output-section.show {
+            display: block;
+        }
+
+        .output-title {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .price-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .price-item:last-child {
+            border-bottom: none;
+        }
+
+        .price-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .price-value {
+            color: #333;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .price-change {
+            color: #27ae60;
+        }
+
+        .price-change.negative {
+            color: #e74c3c;
+        }
+
+        .error-message {
+            color: #e74c3c;
+            padding: 12px;
+            background: #fadbd8;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+            border-left: 4px solid #e74c3c;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid #f0f0f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .currency-hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .button-group button {
+            flex: 1;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .button-group #chartButton {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            flex: 0.8;
+        }
+
+        .button-group button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .button-group button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .chart-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .chart-section.show {
+            display: block;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            margin-top: 20px;
+        }
+
+        .chart-title {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💰 加密货币价格预测</h1>
+        
+        <form id="predictionForm">
+            <div class="form-group">
+                <label for="cryptoName">加密货币名称</label>
+                <select id="cryptoName" required>
+                    <option value="">-- 请选择 --</option>
+                    <option value="Bitcoin">Bitcoin (BTC)</option>
+                    <option value="Ethereum">Ethereum (ETH)</option>
+                    <option value="Ripple">Ripple (XRP)</option>
+                    <option value="Cardano">Cardano (ADA)</option>
+                    <option value="Solana">Solana (SOL)</option>
+                    <option value="Litecoin">Litecoin (LTC)</option>
+                    <option value="Dogecoin">Dogecoin (DOGE)</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="period">预测期间</label>
+                <select id="period" required>
+                    <option value="1周">1周</option>
+                    <option value="1个月" selected>1个月</option>
+                    <option value="3个月">3个月</option>
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" id="predictButton">预测价格</button>
+                <button type="button" id="chartButton">📊 走势图</button>
+            </div>
+        </form>
+
+        <div class="error-message" id="errorMessage"></div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在预测，请稍候...</p>
+        </div>
+
+        <div class="output-section" id="outputSection">
+            <div class="output-title">预测结果</div>
+            <div class="price-item">
+                <span class="price-label">当前价格</span>
+                <span class="price-value" id="currentPrice">-</span>
+            </div>
+            <div class="price-item">
+                <span class="price-label">预测价格</span>
+                <span class="price-value" id="predictedPrice">-</span>
+            </div>
+            <div class="price-item">
+                <span class="price-label">预期涨跌幅</span>
+                <span class="price-value price-change" id="priceChange">-</span>
+            </div>
+        </div>
+
+        <div class="chart-section" id="chartSection">
+            <div class="chart-title">价格走势（过去两年）</div>
+            <div class="chart-container">
+                <canvas id="priceChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('predictionForm');
+        const cryptoInput = document.getElementById('cryptoName');
+        const periodSelect = document.getElementById('period');
+        const predictButton = document.getElementById('predictButton');
+        const chartButton = document.getElementById('chartButton');
+        const errorMessage = document.getElementById('errorMessage');
+        const loading = document.getElementById('loading');
+        const outputSection = document.getElementById('outputSection');
+        let currentCryptoName = '';
+        let priceChart = null;
+        
+        // 检查Chart库是否加载
+        console.log('Chart库状态:', typeof Chart !== 'undefined' ? '已加载' : '未加载');
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js 库未加载！');
+        }
+
+        // 页面加载时初始化 - 显示比特币走势图
+        window.addEventListener('load', async () => {
+            currentCryptoName = 'Bitcoin';
+            cryptoInput.value = 'Bitcoin';
+            await loadChartData('Bitcoin');
+        });
+
+        // 加载图表数据的函数
+        async function loadChartData(cryptoName) {
+            const chartSection = document.getElementById('chartSection');
+            
+            loading.classList.add('show');
+            
+            try {
+                const response = await fetch('/chart-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        crypto_name: cryptoName
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('无法获取图表数据');
+                }
+
+                const data = await response.json();
+                
+                // 销毁旧图表
+                if (priceChart) {
+                    priceChart.destroy();
+                }
+
+                // 创建新图表
+                const canvasElement = document.getElementById('priceChart');
+                const ctx = canvasElement.getContext('2d');
+                priceChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.dates,
+                        datasets: [{
+                            label: `${cryptoName} 价格走势`,
+                            data: data.prices,
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                title: {
+                                    display: true,
+                                    text: '价格 (USD)'
+                                }
+                            }
+                        }
+                    }
+                });
+
+                chartSection.classList.add('show');
+                chartButton.textContent = '📊 隐藏走势图';
+            } catch (error) {
+                alert('获取图表数据失败: ' + error.message);
+            } finally {
+                loading.classList.remove('show');
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const cryptoName = cryptoInput.value.trim();
+            const period = periodSelect.value;
+
+            // 清空之前的错误和结果
+            errorMessage.classList.remove('show');
+            outputSection.classList.remove('show');
+
+            // 显示加载状态
+            loading.classList.add('show');
+            predictButton.disabled = true;
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        crypto_name: cryptoName,
+                        period: period
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    // FastAPI返回的错误格式
+                    const errorMsg = data.detail || data.error || '预测失败';
+                    throw new Error(typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+                }
+
+                // 显示结果
+                document.getElementById('currentPrice').textContent = `$${data.current_price.toFixed(2)}`;
+                document.getElementById('predictedPrice').textContent = `$${data.predicted_price.toFixed(2)}`;
+                
+                const changeElement = document.getElementById('priceChange');
+                changeElement.textContent = `${data.price_change > 0 ? '+' : ''}${data.price_change}%`;
+                
+                if (data.price_change >= 0) {
+                    changeElement.classList.remove('negative');
+                } else {
+                    changeElement.classList.add('negative');
+                }
+
+                outputSection.classList.add('show');
+                
+                // 显示走势图按钮
+                currentCryptoName = cryptoName;
+                chartButton.style.display = 'block';
+
+            } catch (error) {
+                errorMessage.textContent = error.message;
+                errorMessage.classList.add('show');
+            } finally {
+                loading.classList.remove('show');
+                predictButton.disabled = false;
+            }
+        });
+
+        // 走势图按钮点击事件
+        chartButton.addEventListener('click', async () => {
+            const chartSection = document.getElementById('chartSection');
+            
+            if (chartSection.classList.contains('show')) {
+                // 如果已显示，则隐藏
+                chartSection.classList.remove('show');
+                chartButton.textContent = '📊 走势图';
+            } else {
+                // 加载图表
+                await loadChartData(currentCryptoName);
+            }
+        });
+    </script>
+</body>
+</html>
