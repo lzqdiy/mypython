@@ -60,7 +60,14 @@ CRYPTO_SYMBOLS = {
 def get_binance_klines(symbol: str, interval: str = "1d", limit: int = 730):
     """从Binance获取历史K线数据"""
     try:
-        url = "https://api.binance.com/api/v3/klines"
+        # 使用多个Binance镜像地址以规避地理限制
+        urls = [
+            "https://api.binance.com/api/v3/klines",
+            "https://api1.binance.com/api/v3/klines",
+            "https://api2.binance.com/api/v3/klines",
+            "https://api3.binance.com/api/v3/klines",
+        ]
+
         params = {
             "symbol": f"{symbol}USDT",
             "interval": interval,
@@ -68,11 +75,26 @@ def get_binance_klines(symbol: str, interval: str = "1d", limit: int = 730):
         }
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Referer": "https://www.binance.com",
         }
 
-        response = requests.get(url, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
+        response = None
+        for url in urls:
+            try:
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+                if response.status_code == 200:
+                    break
+                elif response.status_code == 451:
+                    # 地理限制，继续尝试下一个URL
+                    continue
+                else:
+                    response.raise_for_status()
+            except requests.exceptions.RequestException:
+                continue
+
+        if response is None or response.status_code != 200:
+            return None
 
         klines = response.json()
         if not klines or len(klines) < 100:
@@ -87,38 +109,118 @@ def get_binance_klines(symbol: str, interval: str = "1d", limit: int = 730):
 
 
 def get_coingecko_data(crypto_name: str):
-    """从CoinGecko获取历史数据"""
+    """从CoinGecko获取历史数据（优先数据源）"""
     try:
-        url = (
-            f"https://api.coingecko.com/api/v3/coins/{crypto_name.lower()}/market_chart"
-        )
-        params = {
-            "vs_currency": "usd",
-            "days": 730,
-            "interval": "daily",
+        crypto_name_lower = crypto_name.lower()
+
+        # 多个可选的User-Agent以规避限制
+        user_agents = [
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15",
+        ]
+
+        # 重试机制
+        for attempt in range(3):
+            try:
+                url = f"https://api.coingecko.com/api/v3/coins/{crypto_name_lower}/market_chart"
+                params = {
+                    "vs_currency": "usd",
+                    "days": 730,
+                    "interval": "daily",
+                }
+
+                headers = {
+                    "User-Agent": user_agents[attempt % len(user_agents)],
+                    "Accept": "application/json",
+                    "Accept-Encoding": "gzip, deflate",
+                }
+
+                response = requests.get(url, params=params, headers=headers, timeout=10)
+
+                # 处理不同的HTTP状态码
+                if response.status_code == 401 or response.status_code == 403:
+                    # 未授权或禁止，等待后重试
+                    wait_time = 3 * (attempt + 1)  # 3, 6, 9秒
+                    print(
+                        f"CoinGecko 返回 {response.status_code}，等待 {wait_time} 秒后重试..."
+                    )
+                    time.sleep(wait_time)
+                    continue
+
+                if response.status_code == 429:
+                    # 速率限制，等待后重试
+                    wait_time = 2 ** (attempt + 1)  # 2, 4, 8秒
+                    print(f"CoinGecko 速率限制，等待 {wait_time} 秒后重试...")
+                    time.sleep(wait_time)
+                    continue
+
+                if response.status_code != 200:
+                    response.raise_for_status()
+
+                data = response.json()
+
+                if "prices" not in data or len(data["prices"]) < 100:
+                    return None
+
+                prices = np.array([price[1] for price in data["prices"]])
+                return prices
+
+            except requests.exceptions.RequestException as e:
+                if attempt == 2:  # 最后一次尝试失败
+                    raise
+                time.sleep(1)
+                continue
+
+    except Exception as e:
+        print(f"CoinGecko API错误: {e}")
+        return None
+
+
+def get_alternative_crypto_data(crypto_name: str):
+    """备用数据源：使用 CryptoCompare API"""
+    try:
+        crypto_name_lower = crypto_name.lower()
+
+        # CryptoCompare 映射
+        crypto_map = {
+            "bitcoin": "BTC",
+            "ethereum": "ETH",
+            "ripple": "XRP",
+            "cardano": "ADA",
+            "solana": "SOL",
+            "litecoin": "LTC",
+            "dogecoin": "DOGE",
         }
+
+        symbol = crypto_map.get(crypto_name_lower, crypto_name_lower.upper())
+
+        # 使用免费的加密数据 API
+        url = "https://min-api.cryptocompare.com/data/histoday"
+        params = {"fsym": symbol, "tsym": "USD", "limit": 730, "allData": "false"}
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
 
-        response = requests.get(url, params=params, headers=headers, timeout=15)
-
-        if response.status_code == 429:
-            # 速率限制，等待后重试
-            time.sleep(2)
-            response = requests.get(url, params=params, headers=headers, timeout=15)
-
+        response = requests.get(url, params=params, headers=headers, timeout=10)
         response.raise_for_status()
+
         data = response.json()
 
-        if "prices" not in data or len(data["prices"]) < 100:
+        if data.get("Response") == "Error":
+            print(f"CryptoCompare API 错误: {data.get('Message')}")
             return None
 
-        prices = np.array([price[1] for price in data["prices"]])
+        if "Data" not in data or len(data["Data"]) < 100:
+            return None
+
+        prices = np.array([item["close"] for item in data["Data"]])
         return prices
+
     except Exception as e:
-        print(f"CoinGecko API错误: {e}")
+        print(f"CryptoCompare API错误: {e}")
         return None
 
 
@@ -126,25 +228,28 @@ def get_coingecko_data(crypto_name: str):
 def predict_price(crypto_name: str, period_days: int):
     """
     使用真实API数据进行预测
-    优先使用Binance，备选CoinGecko
+    数据源优先级：CoinGecko -> Binance -> CryptoCompare
     """
     try:
         crypto_lower = crypto_name.lower()
         prices = None
 
-        # 首先尝试Binance API
-        if crypto_lower in CRYPTO_SYMBOLS:
+        # 首先尝试CoinGecko（更稳定，不受地理限制）
+        prices = get_coingecko_data(crypto_name)
+
+        # 如果CoinGecko失败，尝试Binance
+        if prices is None and crypto_lower in CRYPTO_SYMBOLS:
             symbol = CRYPTO_SYMBOLS[crypto_lower]
             prices = get_binance_klines(symbol, limit=730)
 
-        # 如果Binance失败，尝试CoinGecko
+        # 如果前两个都失败，尝试CryptoCompare
         if prices is None:
-            prices = get_coingecko_data(crypto_name)
+            prices = get_alternative_crypto_data(crypto_name)
 
         # 如果都失败，报错
         if prices is None:
             raise ValueError(
-                f"无法获取 {crypto_name} 的数据。请检查加密货币名称是否正确。"
+                f"无法获取 {crypto_name} 的数据。请检查加密货币名称是否正确，或稍后重试。"
             )
 
         if len(prices) < 100:
@@ -243,17 +348,20 @@ async def get_chart_data(data: dict = Body(...)):
         prices = None
         crypto_lower = crypto_name.lower()
 
-        # 首先尝试Binance API
-        if crypto_lower in CRYPTO_SYMBOLS:
+        # 首先尝试CoinGecko（更稳定）
+        prices = get_coingecko_data(crypto_name)
+
+        # 如果CoinGecko失败，尝试Binance
+        if prices is None and crypto_lower in CRYPTO_SYMBOLS:
             symbol = CRYPTO_SYMBOLS[crypto_lower]
             prices = get_binance_klines(symbol, limit=730)
 
-        # 如果Binance失败，尝试CoinGecko
+        # 如果前两个都失败，尝试CryptoCompare
         if prices is None:
-            prices = get_coingecko_data(crypto_name)
+            prices = get_alternative_crypto_data(crypto_name)
 
         if prices is None:
-            raise ValueError(f"无法获取 {crypto_name} 的数据")
+            raise ValueError(f"无法获取 {crypto_name} 的数据，请稍后重试")
 
         # 生成日期标签（最后730天）
         today = datetime.now()
