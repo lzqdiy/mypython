@@ -47,6 +47,7 @@ CRYPTO_SYMBOLS = {
     "solana": "SOL",
     "litecoin": "LTC",
     "dogecoin": "DOGE",
+    "polkadot": "DOT",
     "btc": "BTC",
     "eth": "ETH",
     "xrp": "XRP",
@@ -54,6 +55,7 @@ CRYPTO_SYMBOLS = {
     "sol": "SOL",
     "ltc": "LTC",
     "doge": "DOGE",
+    "dot": "DOT",
 }
 
 
@@ -192,6 +194,7 @@ def get_alternative_crypto_data(crypto_name: str):
             "solana": "SOL",
             "litecoin": "LTC",
             "dogecoin": "DOGE",
+            "polkadot": "DOT",
         }
 
         symbol = crypto_map.get(crypto_name_lower, crypto_name_lower.upper())

@@ -13,7 +13,7 @@ git push -u origin main
 
 
 ■Local　Test
-uvicorn app_fastapi:app --reload --host 0.0.0.0 --port 8000
+uvicorn app_fastapi:app --reload --host 0.0.0.0 --port 5000
 
 
 ■render設定　https://dashboard.render.com/web/new?onboarding=active

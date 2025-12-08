@@ -262,6 +262,7 @@
                     <option value="Solana">Solana (SOL)</option>
                     <option value="Litecoin">Litecoin (LTC)</option>
                     <option value="Dogecoin">Dogecoin (DOGE)</option>
+                    <option value="Polkadot">Polkadot (DOT)</option>
                 </select>
             </div>
 
@@ -329,21 +330,24 @@
             console.error('Chart.js 库未加载！');
         }
 
-        // 页面加载时初始化 - 显示比特币走势图和当前价格
+        // 页面加载时初始化 - 显示比特币当前价格和预测结果（不显示走势图）
         window.addEventListener('load', async () => {
             currentCryptoName = 'Bitcoin';
             cryptoInput.value = 'Bitcoin';
-            await loadChartData('Bitcoin');
+            // 不自动加载走势图，只加载当前价格和预测
             await loadCurrentPrice('Bitcoin');
+            await autoPredictPrice('Bitcoin');
         });
 
-        // 加密货币选择变化时自动加载对应的走势图、当前价格和预测结果
+        // 加密货币选择变化时自动加载当前价格和预测结果（不自动显示走势图）
         cryptoInput.addEventListener('change', async (e) => {
             const selectedCrypto = e.target.value;
             if (selectedCrypto && selectedCrypto !== '') {
                 currentCryptoName = selectedCrypto;
-                // 自动加载该加密货币的走势图
-                await loadChartData(selectedCrypto);
+                // 隐藏走势图
+                const chartSection = document.getElementById('chartSection');
+                chartSection.classList.remove('show');
+                chartButton.textContent = '📊 走势图';
                 // 自动加载该加密货币的当前价格
                 await loadCurrentPrice(selectedCrypto);
                 // 自动根据新选择的加密货币和当前预测期间计算预测结果
@@ -479,10 +483,48 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
                         plugins: {
                             legend: {
                                 display: true,
                                 position: 'top',
+                            },
+                            tooltip: {
+                                enabled: true,
+                                mode: 'index',
+                                intersect: false,
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                padding: 12,
+                                cornerRadius: 6,
+                                titleColor: '#fff',
+                                bodyColor: '#fff',
+                                borderColor: '#667eea',
+                                borderWidth: 1,
+                                callbacks: {
+                                    title: function(context) {
+                                        // 显示日期
+                                        return '日期: ' + context[0].label;
+                                    },
+                                    label: function(context) {
+                                        // 显示价格，格式化为 USD
+                                        return '价格: $' + parseFloat(context.parsed.y).toFixed(2);
+                                    },
+                                    afterLabel: function(context) {
+                                        // 计算价格涨跌
+                                        const index = context.dataIndex;
+                                        const prices = context.chart.data.datasets[0].data;
+                                        if (index > 0) {
+                                            const prevPrice = prices[index - 1];
+                                            const currentPrice = prices[index];
+                                            const change = ((currentPrice - prevPrice) / prevPrice * 100).toFixed(2);
+                                            return '日涨跌: ' + (change > 0 ? '+' : '') + change + '%';
+                                        }
+                                        return '';
+                                    }
+                                }
                             }
                         },
                         scales: {
