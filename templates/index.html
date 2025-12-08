@@ -304,7 +304,7 @@
         </div>
 
         <div class="chart-section" id="chartSection">
-            <div class="chart-title">价格走势（过去两年）</div>
+            <div class="chart-title">价格走势（过去一年）</div>
             <div class="chart-container">
                 <canvas id="priceChart"></canvas>
             </div>
@@ -329,12 +329,105 @@
             console.error('Chart.js 库未加载！');
         }
 
-        // 页面加载时初始化 - 显示比特币走势图
+        // 页面加载时初始化 - 显示比特币走势图和当前价格
         window.addEventListener('load', async () => {
             currentCryptoName = 'Bitcoin';
             cryptoInput.value = 'Bitcoin';
             await loadChartData('Bitcoin');
+            await loadCurrentPrice('Bitcoin');
         });
+
+        // 加密货币选择变化时自动加载对应的走势图、当前价格和预测结果
+        cryptoInput.addEventListener('change', async (e) => {
+            const selectedCrypto = e.target.value;
+            if (selectedCrypto && selectedCrypto !== '') {
+                currentCryptoName = selectedCrypto;
+                // 自动加载该加密货币的走势图
+                await loadChartData(selectedCrypto);
+                // 自动加载该加密货币的当前价格
+                await loadCurrentPrice(selectedCrypto);
+                // 自动根据新选择的加密货币和当前预测期间计算预测结果
+                await autoPredictPrice(selectedCrypto);
+            }
+        });
+
+        // 获取并显示当前价格
+        async function loadCurrentPrice(cryptoName) {
+            try {
+                const response = await fetch('/current-price', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        crypto_name: cryptoName
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    // 显示当前价格
+                    document.getElementById('currentPrice').textContent = `$${data.current_price.toFixed(2)}`;
+                } else {
+                    console.error('获取当前价格失败');
+                }
+            } catch (error) {
+                console.error('获取当前价格出错:', error);
+            }
+        }
+
+        // 自动预测价格的函数
+        async function autoPredictPrice(cryptoName) {
+            try {
+                const period = periodSelect.value;
+                
+                // 清空之前的错误
+                errorMessage.classList.remove('show');
+                
+                // 显示加载状态
+                loading.classList.add('show');
+                
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        crypto_name: cryptoName,
+                        period: period
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    // 静默处理错误，不显示错误消息
+                    console.error('预测失败:', data.detail || data.error);
+                    loading.classList.remove('show');
+                    return;
+                }
+
+                // 显示预测结果
+                document.getElementById('predictedPrice').textContent = `$${data.predicted_price.toFixed(2)}`;
+                
+                const changeElement = document.getElementById('priceChange');
+                changeElement.textContent = `${data.price_change > 0 ? '+' : ''}${data.price_change}%`;
+                
+                if (data.price_change >= 0) {
+                    changeElement.classList.remove('negative');
+                } else {
+                    changeElement.classList.add('negative');
+                }
+
+                // 显示完整的输出部分
+                outputSection.classList.add('show');
+                
+            } catch (error) {
+                console.error('自动预测出错:', error);
+            } finally {
+                loading.classList.remove('show');
+            }
+        }
 
         // 加载图表数据的函数
         async function loadChartData(cryptoName) {
@@ -478,14 +571,20 @@
         // 走势图按钮点击事件
         chartButton.addEventListener('click', async () => {
             const chartSection = document.getElementById('chartSection');
+            const selectedCrypto = cryptoInput.value.trim();
+            
+            if (selectedCrypto === '') {
+                alert('请先选择加密货币');
+                return;
+            }
             
             if (chartSection.classList.contains('show')) {
                 // 如果已显示，则隐藏
                 chartSection.classList.remove('show');
                 chartButton.textContent = '📊 走势图';
             } else {
-                // 加载图表
-                await loadChartData(currentCryptoName);
+                // 加载选中加密货币的图表
+                await loadChartData(selectedCrypto);
             }
         });
     </script>

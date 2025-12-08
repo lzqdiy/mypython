@@ -57,8 +57,8 @@ CRYPTO_SYMBOLS = {
 }
 
 
-def get_binance_klines(symbol: str, interval: str = "1d", limit: int = 730):
-    """从Binance获取历史K线数据"""
+def get_binance_klines(symbol: str, interval: str = "1d", limit: int = 365):
+    """从Binance获取历史K线数据（过去一年）"""
     try:
         # 使用多个Binance镜像地址以规避地理限制
         urls = [
@@ -127,7 +127,7 @@ def get_coingecko_data(crypto_name: str):
                 url = f"https://api.coingecko.com/api/v3/coins/{crypto_name_lower}/market_chart"
                 params = {
                     "vs_currency": "usd",
-                    "days": 730,
+                    "days": 365,
                     "interval": "daily",
                 }
 
@@ -196,9 +196,9 @@ def get_alternative_crypto_data(crypto_name: str):
 
         symbol = crypto_map.get(crypto_name_lower, crypto_name_lower.upper())
 
-        # 使用免费的加密数据 API
+        # 使用免费的加密数据 API（过去一年的数据）
         url = "https://min-api.cryptocompare.com/data/histoday"
-        params = {"fsym": symbol, "tsym": "USD", "limit": 730, "allData": "false"}
+        params = {"fsym": symbol, "tsym": "USD", "limit": 365, "allData": "false"}
 
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -224,7 +224,7 @@ def get_alternative_crypto_data(crypto_name: str):
         return None
 
 
-# 基于过去两年数据的价格预测函数
+# 基于过去一年数据的价格预测函数
 def predict_price(crypto_name: str, period_days: int):
     """
     使用真实API数据进行预测
@@ -235,12 +235,13 @@ def predict_price(crypto_name: str, period_days: int):
         prices = None
 
         # 首先尝试CoinGecko（更稳定，不受地理限制）
+        # 获取过去一年的历史数据
         prices = get_coingecko_data(crypto_name)
 
         # 如果CoinGecko失败，尝试Binance
         if prices is None and crypto_lower in CRYPTO_SYMBOLS:
             symbol = CRYPTO_SYMBOLS[crypto_lower]
-            prices = get_binance_klines(symbol, limit=730)
+            prices = get_binance_klines(symbol, limit=365)
 
         # 如果前两个都失败，尝试CryptoCompare
         if prices is None:
@@ -301,6 +302,53 @@ async def root():
     return FileResponse(html_file, media_type="text/html; charset=utf-8")
 
 
+@app.post("/current-price")
+async def get_current_price(data: dict = Body(...)):
+    """获取加密货币当前价格"""
+    try:
+        crypto_name = data.get("crypto_name", "").strip()
+
+        if not crypto_name:
+            raise HTTPException(status_code=400, detail="请输入加密货币名称")
+
+        crypto_lower = crypto_name.lower()
+        current_price = None
+
+        # 尝试从CoinGecko获取当前价格
+        try:
+            url = f"https://api.coingecko.com/api/v3/simple/price"
+            params = {"ids": crypto_lower, "vs_currencies": "usd"}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if crypto_lower in data and "usd" in data[crypto_lower]:
+                    current_price = data[crypto_lower]["usd"]
+        except:
+            pass
+
+        # 备用方案：从历史数据获取最新价格
+        if current_price is None:
+            prices = get_coingecko_data(crypto_name)
+            if prices is None and crypto_lower in CRYPTO_SYMBOLS:
+                symbol = CRYPTO_SYMBOLS[crypto_lower]
+                prices = get_binance_klines(symbol, limit=1)
+            if prices is None:
+                prices = get_alternative_crypto_data(crypto_name)
+
+            if prices is not None and len(prices) > 0:
+                current_price = float(prices[-1])
+
+        if current_price is None:
+            raise ValueError(f"无法获取 {crypto_name} 的当前价格")
+
+        return {"crypto_name": crypto_name, "current_price": round(current_price, 2)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取价格失败: {str(e)}")
+
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """预测加密货币价格"""
@@ -354,7 +402,7 @@ async def get_chart_data(data: dict = Body(...)):
         # 如果CoinGecko失败，尝试Binance
         if prices is None and crypto_lower in CRYPTO_SYMBOLS:
             symbol = CRYPTO_SYMBOLS[crypto_lower]
-            prices = get_binance_klines(symbol, limit=730)
+            prices = get_binance_klines(symbol, limit=365)
 
         # 如果前两个都失败，尝试CryptoCompare
         if prices is None:
@@ -363,10 +411,10 @@ async def get_chart_data(data: dict = Body(...)):
         if prices is None:
             raise ValueError(f"无法获取 {crypto_name} 的数据，请稍后重试")
 
-        # 生成日期标签（最后730天）
+        # 生成日期标签（最后365天 - 过去一年）
         today = datetime.now()
         dates = [
-            (today - timedelta(days=730 - i)).strftime("%Y-%m-%d")
+            (today - timedelta(days=365 - i)).strftime("%Y-%m-%d")
             for i in range(len(prices))
         ]
 
