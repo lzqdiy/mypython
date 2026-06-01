@@ -8,6 +8,11 @@ from pathlib import Path
 import time
 from datetime import datetime, timedelta
 import json
+import sys
+
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
 # 初始化FastAPI应用
 app = FastAPI(title="加密货币价格预测")
