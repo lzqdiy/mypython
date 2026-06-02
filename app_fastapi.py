@@ -15,7 +15,7 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
 
 # 初始化FastAPI应用
-app = FastAPI(title="我的加密货币")
+app = FastAPI(title="我的无敌加密货币")
 
 
 # 请求模型
